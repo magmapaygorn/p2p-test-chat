@@ -3,130 +3,77 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Serverless P2P Chat</title>
+<title>Serverless P2P Chat Simple</title>
 <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
 <style>
-body{margin:0;height:100vh;font-family:'Segoe UI',sans-serif;display:flex;background:#202225;color:white}
-.chat-container{display:flex;flex:1}
-.member-panel{width:250px;background:#2f3136;padding:10px;display:flex;flex-direction:column}
-.member-panel h2{font-size:1rem;font-weight:bold;margin-bottom:10px}
-.member-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
-.member{display:flex;align-items:center;gap:8px;padding:4px 2px;border-radius:4px;transition:background 0.2s}
-.member:hover{background:#36393f}
-.avatar{width:32px;height:32px;border-radius:50%;display:flex;justify-content:center;align-items:center;font-weight:bold;flex-shrink:0;font-size:0.9rem}
-.chat-area{flex:1;display:flex;flex-direction:column}
-#chatBox{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
-.message{display:flex;gap:10px;align-items:flex-start;max-width:80%}
-.message.self{flex-direction:row-reverse;align-self:flex-end}
-.message-content{background:#36393f;padding:10px 14px;border-radius:16px;position:relative}
-.message.self .message-content{background:#5865f2;color:white}
-.message-content .username{font-weight:bold;margin-bottom:2px}
-.message-content .text{word-wrap:break-word}
-.message-content .timestamp{font-size:0.7rem;opacity:0.6;position:absolute;bottom:2px;right:8px}
-.typing-indicator{font-size:0.85rem;opacity:0.6;font-style:italic;margin-left:10px;margin-bottom:5px}
-.input-container{display:flex;padding:10px;background:#40444b}
-.input-container input{flex:1;padding:8px 10px;border-radius:5px;background:#2f3136;border:none;color:white;outline:none}
-.input-container button{margin-left:6px;background:#5865f2;border:none;padding:8px 14px;border-radius:5px;cursor:pointer;color:white;font-weight:bold}
-.input-container button:hover{background:#4752c4}
-textarea{width:100%;height:100px;background:#2f3136;color:white;border:none;border-radius:5px;padding:5px;resize:none;}
+body{margin:0;font-family:sans-serif;background:#202225;color:white;display:flex;flex-direction:column;height:100vh;}
+#chatBox{flex:1;overflow-y:auto;padding:10px;border-bottom:1px solid #444;}
+.message{margin:5px 0;}
+.message.self{text-align:right;color:#00f;}
+#members{padding:5px;background:#2f3136;}
+.input-container{display:flex;padding:5px;background:#40444b;}
+input,textarea{flex:1;padding:5px;margin-right:5px;border-radius:5px;background:#2f3136;color:white;border:none;}
+button{padding:5px 10px;border:none;border-radius:5px;background:#5865f2;color:white;cursor:pointer;}
 </style>
 </head>
 <body>
 
-<div class="chat-container">
-  <div class="member-panel">
-    <h2>👥 Members</h2>
-    <ul id="memberList" class="member-list"></ul>
-  </div>
-  <div class="chat-area">
-    <div id="chatBox"></div>
-    <div id="typingIndicator" class="typing-indicator"></div>
-    <div class="input-container">
-      <input id="msgInput" placeholder="Type a message..."/>
-      <button id="sendBtn">Send</button>
-    </div>
-    <div class="input-container flex-col gap-2 mt-2">
-      <button id="createOfferBtn">Create Offer</button>
-      <textarea id="offerOutput" placeholder="Offer/Answer appears here"></textarea>
-      <textarea id="offerInput" placeholder="Paste offer/answer here"></textarea>
-      <button id="acceptOfferBtn">Accept Offer</button>
-    </div>
-  </div>
+<div id="members">Members: <span id="memberList"></span></div>
+<div id="chatBox"></div>
+
+<div class="input-container">
+<input id="msgInput" placeholder="Type a message...">
+<button id="sendBtn">Send</button>
 </div>
 
-<div class="input-container" style="margin:10px;">
-  <input id="nameInput" placeholder="Enter your name"/>
+<div class="input-container" style="flex-direction:column;">
+<input id="nameInput" placeholder="Enter your name">
+<button id="genCodeBtn">Generate Connection Code</button>
+<textarea id="codeArea" placeholder="Share this code with your peer"></textarea>
+<textarea id="pasteCode" placeholder="Paste code from peer"></textarea>
+<button id="connectBtn">Connect</button>
 </div>
 
 <script>
 const chatBox=document.getElementById('chatBox');
 const msgInput=document.getElementById('msgInput');
 const sendBtn=document.getElementById('sendBtn');
-const memberList=document.getElementById('memberList');
-const typingIndicator=document.getElementById('typingIndicator');
 const nameInput=document.getElementById('nameInput');
-
-const createOfferBtn=document.getElementById('createOfferBtn');
-const offerOutput=document.getElementById('offerOutput');
-const offerInput=document.getElementById('offerInput');
-const acceptOfferBtn=document.getElementById('acceptOfferBtn');
+const genCodeBtn=document.getElementById('genCodeBtn');
+const codeArea=document.getElementById('codeArea');
+const pasteCode=document.getElementById('pasteCode');
+const connectBtn=document.getElementById('connectBtn');
+const memberList=document.getElementById('memberList');
 
 let myName='';
+const peers=[];
+const members={};
 const localId=uuidv4();
-let peers={};
-let members={};
-let avatars={};
 const receivedMessages=new Set();
 
-function generateAvatar(name){
-  const colors=['#f87171','#fbbf24','#34d399','#60a5fa','#a78bfa','#f472b6'];
-  const color=colors[Math.floor(Math.random()*colors.length)];
-  return {color,initials:name.charAt(0).toUpperCase()};
-}
-
 function addMessage(name,text,self=false){
-  const msgDiv=document.createElement('div');
-  msgDiv.className='message '+(self?'self':'peer');
-  const avatarSpan=document.createElement('div');
-  avatarSpan.className='avatar';
-  avatarSpan.style.backgroundColor=avatars[name]?.color||'#888';
-  avatarSpan.textContent=avatars[name]?.initials||name.charAt(0).toUpperCase();
-  const contentDiv=document.createElement('div');
-  contentDiv.className='message-content';
-  contentDiv.innerHTML=`<div class="username">${name}</div><div class="text">${text}</div><div class="timestamp">${new Date().toLocaleTimeString().slice(0,5)}</div>`;
-  msgDiv.appendChild(avatarSpan);
-  msgDiv.appendChild(contentDiv);
-  chatBox.appendChild(msgDiv);
+  const div=document.createElement('div');
+  div.className='message'+(self?' self':'');
+  div.textContent=name+": "+text;
+  chatBox.appendChild(div);
   chatBox.scrollTop=chatBox.scrollHeight;
 }
 
 function updateMembers(){
-  memberList.innerHTML='';
-  Object.values(members).forEach(name=>{
-    const li=document.createElement('li');
-    li.className='member flex items-center gap-2';
-    const avatarSpan=document.createElement('div');
-    avatarSpan.className='avatar';
-    avatarSpan.style.backgroundColor=avatars[name]?.color||'#888';
-    avatarSpan.textContent=avatars[name]?.initials||name.charAt(0).toUpperCase();
-    li.appendChild(avatarSpan);
-    li.appendChild(document.createTextNode(name));
-    memberList.appendChild(li);
-  });
+  memberList.textContent=Object.values(members).join(', ');
 }
 
-function broadcastToPeers(data){
-  Object.values(peers).forEach(p=>p.send(JSON.stringify(data)));
+function broadcast(msg){
+  peers.forEach(p=>p.send(JSON.stringify(msg)));
 }
 
-function connectPeer(signalData=null,initiator=false){
+function createPeer(initiator=true, remoteSignal=null){
   const peer=new SimplePeer({initiator,trickle:false});
-  peers[uuidv4()]=peer;
+  peers.push(peer);
 
   peer.on('signal',data=>{
-    offerOutput.value=JSON.stringify(data);
+    codeArea.value=JSON.stringify(data);
   });
 
   peer.on('data',raw=>{
@@ -136,17 +83,25 @@ function connectPeer(signalData=null,initiator=false){
 
     if(msg.type==='message'){
       addMessage(msg.name,msg.text,false);
-      broadcastToPeers(msg);
-    }
-    else if(msg.type==='member-join'){
+      broadcast(msg);
+    } else if(msg.type==='join'){
       members[msg.name]=msg.name;
-      avatars[msg.name]=avatars[msg.name]||generateAvatar(msg.name);
       updateMembers();
-      broadcastToPeers(msg);
+      broadcast(msg);
     }
   });
 
-  if(signalData) peer.signal(signalData);
+  if(remoteSignal) peer.signal(remoteSignal);
+
+  // announce yourself
+  if(initiator){
+    peer.on('connect',()=>{
+      members[myName]=myName;
+      updateMembers();
+      broadcast({type:'join',name:myName,id:localId});
+    });
+  }
+
   return peer;
 }
 
@@ -157,26 +112,21 @@ sendBtn.onclick=()=>{
   const msg={type:'message',id,name:myName,text};
   addMessage(myName,text,true);
   receivedMessages.add(id);
-  broadcastToPeers(msg);
+  broadcast(msg);
   msgInput.value='';
 };
 
-createOfferBtn.onclick=()=>{
+genCodeBtn.onclick=()=>{
   myName=nameInput.value||'Anon';
-  members[myName]=myName;
-  avatars[myName]=generateAvatar(myName);
-  updateMembers();
-  connectPeer(true);
+  createPeer(true);
 };
 
-acceptOfferBtn.onclick=()=>{
-  const data=JSON.parse(offerInput.value);
+connectBtn.onclick=()=>{
+  const remoteData=JSON.parse(pasteCode.value);
   myName=nameInput.value||'Anon';
-  members[myName]=myName;
-  avatars[myName]=generateAvatar(myName);
-  updateMembers();
-  connectPeer(data,false);
+  createPeer(false,remoteData);
 };
 </script>
+
 </body>
 </html>
