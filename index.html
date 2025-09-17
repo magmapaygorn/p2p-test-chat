@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Serverless P2P Chat Simple</title>
+<title>Public P2P Chat</title>
 <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
 <style>
@@ -29,10 +29,10 @@ button{padding:5px 10px;border:none;border-radius:5px;background:#5865f2;color:w
 
 <div class="input-container" style="flex-direction:column;">
 <input id="nameInput" placeholder="Enter your name">
-<button id="genCodeBtn">Generate Connection Code</button>
-<textarea id="codeArea" placeholder="Share this code with your peer"></textarea>
-<textarea id="pasteCode" placeholder="Paste code from peer"></textarea>
-<button id="connectBtn">Connect</button>
+<button id="genCodeBtn">Generate My Code</button>
+<textarea id="myCode" placeholder="Share this with others"></textarea>
+<textarea id="pasteCode" placeholder="Paste code from other peer"></textarea>
+<button id="connectBtn">Connect to Peer</button>
 </div>
 
 <script>
@@ -41,15 +41,15 @@ const msgInput=document.getElementById('msgInput');
 const sendBtn=document.getElementById('sendBtn');
 const nameInput=document.getElementById('nameInput');
 const genCodeBtn=document.getElementById('genCodeBtn');
-const codeArea=document.getElementById('codeArea');
+const myCode=document.getElementById('myCode');
 const pasteCode=document.getElementById('pasteCode');
 const connectBtn=document.getElementById('connectBtn');
 const memberList=document.getElementById('memberList');
 
 let myName='';
-const peers=[];
-const members={};
 const localId=uuidv4();
+const peers={};
+const members={};
 const receivedMessages=new Set();
 
 function addMessage(name,text,self=false){
@@ -64,16 +64,19 @@ function updateMembers(){
   memberList.textContent=Object.values(members).join(', ');
 }
 
-function broadcast(msg){
-  peers.forEach(p=>p.send(JSON.stringify(msg)));
+function broadcast(msg, exceptPeerId=null){
+  Object.entries(peers).forEach(([id,peer])=>{
+    if(id!==exceptPeerId) peer.send(JSON.stringify(msg));
+  });
 }
 
 function createPeer(initiator=true, remoteSignal=null){
+  const peerId=uuidv4();
   const peer=new SimplePeer({initiator,trickle:false});
-  peers.push(peer);
+  peers[peerId]=peer;
 
   peer.on('signal',data=>{
-    codeArea.value=JSON.stringify(data);
+    myCode.value=JSON.stringify({peerId,signal:data,name:myName});
   });
 
   peer.on('data',raw=>{
@@ -91,16 +94,13 @@ function createPeer(initiator=true, remoteSignal=null){
     }
   });
 
-  if(remoteSignal) peer.signal(remoteSignal);
+  peer.on('connect',()=>{
+    members[myName]=myName;
+    updateMembers();
+    broadcast({type:'join',name:myName,id:localId});
+  });
 
-  // announce yourself
-  if(initiator){
-    peer.on('connect',()=>{
-      members[myName]=myName;
-      updateMembers();
-      broadcast({type:'join',name:myName,id:localId});
-    });
-  }
+  if(remoteSignal) peer.signal(remoteSignal.signal);
 
   return peer;
 }
@@ -122,9 +122,13 @@ genCodeBtn.onclick=()=>{
 };
 
 connectBtn.onclick=()=>{
-  const remoteData=JSON.parse(pasteCode.value);
-  myName=nameInput.value||'Anon';
-  createPeer(false,remoteData);
+  try{
+    const remoteData=JSON.parse(pasteCode.value);
+    myName=nameInput.value||'Anon';
+    if(!peers[remoteData.peerId]){
+      createPeer(false,remoteData);
+    }
+  }catch(e){alert('Invalid code');}
 };
 </script>
 
