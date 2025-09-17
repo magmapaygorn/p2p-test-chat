@@ -8,51 +8,48 @@
 <script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
 <style>
-body { margin:0; height:100vh; font-family: 'Segoe UI', sans-serif; display:flex; background:#202225; color:white; }
-.chat-container { display:flex; flex:1; }
-.member-panel { width:250px; background:#2f3136; padding:10px; display:flex; flex-direction:column; }
-.member-panel h2 { font-size:1rem; font-weight:bold; margin-bottom:10px; }
-.member-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
-.member { display:flex; align-items:center; gap:8px; padding:4px 2px; border-radius:4px; transition:background 0.2s; }
-.member:hover { background: #36393f; }
-.avatar { width:32px; height:32px; border-radius:50%; display:flex; justify-content:center; align-items:center; font-weight:bold; flex-shrink:0; font-size:0.9rem; }
-.chat-area { flex:1; display:flex; flex-direction:column; }
-#chatBox { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:8px; scroll-behavior:smooth; }
-.message { display:flex; gap:10px; align-items:flex-start; max-width:80%; }
-.message.self { flex-direction:row-reverse; align-self:flex-end; }
-.message-content { background:#36393f; padding:10px 14px; border-radius:16px; position:relative; }
-.message.self .message-content { background:#5865f2; color:white; }
-.message-content .username { font-weight:bold; margin-bottom:2px; }
-.message-content .text { word-wrap: break-word; }
-.message-content .timestamp { font-size:0.7rem; opacity:0.6; position:absolute; bottom:2px; right:8px; }
-.typing-indicator { font-size:0.85rem; opacity:0.6; font-style:italic; margin-left:10px; margin-bottom:5px; }
-.input-container { display:flex; padding:10px; background:#40444b; }
-.input-container input { flex:1; padding:8px 10px; border-radius:5px; background:#2f3136; border:none; color:white; outline:none; }
-.input-container button { margin-left:6px; background:#5865f2; border:none; padding:8px 14px; border-radius:5px; cursor:pointer; color:white; font-weight:bold; }
-.input-container button:hover { background:#4752c4; }
+body{margin:0;height:100vh;font-family:'Segoe UI',sans-serif;display:flex;background:#202225;color:white}
+.chat-container{display:flex;flex:1}
+.member-panel{width:250px;background:#2f3136;padding:10px;display:flex;flex-direction:column}
+.member-panel h2{font-size:1rem;font-weight:bold;margin-bottom:10px}
+.member-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.member{display:flex;align-items:center;gap:8px;padding:4px 2px;border-radius:4px;transition:background 0.2s}
+.member:hover{background:#36393f}
+.avatar{width:32px;height:32px;border-radius:50%;display:flex;justify-content:center;align-items:center;font-weight:bold;flex-shrink:0;font-size:0.9rem}
+.chat-area{flex:1;display:flex;flex-direction:column}
+#chatBox{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
+.message{display:flex;gap:10px;align-items:flex-start;max-width:80%}
+.message.self{flex-direction:row-reverse;align-self:flex-end}
+.message-content{background:#36393f;padding:10px 14px;border-radius:16px;position:relative}
+.message.self .message-content{background:#5865f2;color:white}
+.message-content .username{font-weight:bold;margin-bottom:2px}
+.message-content .text{word-wrap:break-word}
+.message-content .timestamp{font-size:0.7rem;opacity:0.6;position:absolute;bottom:2px;right:8px}
+.typing-indicator{font-size:0.85rem;opacity:0.6;font-style:italic;margin-left:10px;margin-bottom:5px}
+.input-container{display:flex;padding:10px;background:#40444b}
+.input-container input{flex:1;padding:8px 10px;border-radius:5px;background:#2f3136;border:none;color:white;outline:none}
+.input-container button{margin-left:6px;background:#5865f2;border:none;padding:8px 14px;border-radius:5px;cursor:pointer;color:white;font-weight:bold}
+.input-container button:hover{background:#4752c4}
 </style>
 </head>
 <body>
 
 <div class="chat-container">
-  <!-- Member Panel -->
   <div class="member-panel">
     <h2>👥 Members</h2>
     <ul id="memberList" class="member-list"></ul>
   </div>
 
-  <!-- Chat Area -->
   <div class="chat-area">
     <div id="chatBox"></div>
     <div id="typingIndicator" class="typing-indicator"></div>
     <div class="input-container">
-      <input id="msgInput" type="text" placeholder="Type a message..."/>
+      <input id="msgInput" placeholder="Type a message..."/>
       <button id="sendBtn">Send</button>
     </div>
   </div>
 </div>
 
-<!-- Join Section -->
 <div class="input-container" style="margin:10px;">
   <input id="nameInput" placeholder="Enter your name"/>
   <input id="codeInput" placeholder="Room code (blank=public)"/>
@@ -60,44 +57,49 @@ body { margin:0; height:100vh; font-family: 'Segoe UI', sans-serif; display:flex
 </div>
 
 <script>
-// ------------------- GLOBALS -------------------
-const chatBox = document.getElementById('chatBox');
-const msgInput = document.getElementById('msgInput');
-const sendBtn = document.getElementById('sendBtn');
-const joinBtn = document.getElementById('joinBtn');
-const codeInput = document.getElementById('codeInput');
-const nameInput = document.getElementById('nameInput');
-const memberList = document.getElementById('memberList');
-const typingIndicator = document.getElementById('typingIndicator');
+const chatBox=document.getElementById('chatBox');
+const msgInput=document.getElementById('msgInput');
+const sendBtn=document.getElementById('sendBtn');
+const joinBtn=document.getElementById('joinBtn');
+const codeInput=document.getElementById('codeInput');
+const nameInput=document.getElementById('nameInput');
+const memberList=document.getElementById('memberList');
+const typingIndicator=document.getElementById('typingIndicator');
 
-let peers = {};
-let localId = uuidv4();
-let myName = '';
-let roomCode = 'public';
-let members = {};
-let avatars = {};
+let peers={};
+let localId=uuidv4();
+let myName='';
+let roomCode='public';
+let members={};
+let avatars={};
 let typingTimeout;
 
-// ------------------- FUNCTIONS -------------------
+const socket=new WebSocket('ws://localhost:8080');
+
+socket.onmessage=(event)=>{
+  const data=JSON.parse(event.data);
+  if(data.from!==localId){
+    if(data.signal) connectToPeer(data.from,data.signal,false);
+    handleIncoming(data);
+  }
+};
+
 function generateAvatar(name){
-  const colors = ['#f87171','#fbbf24','#34d399','#60a5fa','#a78bfa','#f472b6'];
-  const color = colors[Math.floor(Math.random()*colors.length)];
-  return {color, initials: name.charAt(0).toUpperCase()};
+  const colors=['#f87171','#fbbf24','#34d399','#60a5fa','#a78bfa','#f472b6'];
+  const color=colors[Math.floor(Math.random()*colors.length)];
+  return {color,initials:name.charAt(0).toUpperCase()};
 }
 
 function addMessage(name,text,self=false){
-  const msgDiv = document.createElement('div');
-  msgDiv.className='message ' + (self?'self':'peer');
-
-  const avatarSpan = document.createElement('div');
+  const msgDiv=document.createElement('div');
+  msgDiv.className='message '+(self?'self':'peer');
+  const avatarSpan=document.createElement('div');
   avatarSpan.className='avatar';
-  avatarSpan.style.backgroundColor=avatars[name]?.color || '#888';
-  avatarSpan.textContent=avatars[name]?.initials || name.charAt(0).toUpperCase();
-
-  const contentDiv = document.createElement('div');
+  avatarSpan.style.backgroundColor=avatars[name]?.color||'#888';
+  avatarSpan.textContent=avatars[name]?.initials||name.charAt(0).toUpperCase();
+  const contentDiv=document.createElement('div');
   contentDiv.className='message-content';
   contentDiv.innerHTML=`<div class="username">${name}</div><div class="text">${text}</div><div class="timestamp">${new Date().toLocaleTimeString().slice(0,5)}</div>`;
-
   msgDiv.appendChild(avatarSpan);
   msgDiv.appendChild(contentDiv);
   chatBox.appendChild(msgDiv);
@@ -107,63 +109,43 @@ function addMessage(name,text,self=false){
 function updateMembers(){
   memberList.innerHTML='';
   Object.entries(members).forEach(([id,name])=>{
-    const li = document.createElement('li');
+    const li=document.createElement('li');
     li.className='member flex items-center gap-2';
-    const avatarSpan = document.createElement('div');
+    const avatarSpan=document.createElement('div');
     avatarSpan.className='avatar';
-    avatarSpan.style.backgroundColor=avatars[name]?.color || '#888';
-    avatarSpan.textContent=avatars[name]?.initials || name.charAt(0).toUpperCase();
+    avatarSpan.style.backgroundColor=avatars[name]?.color||'#888';
+    avatarSpan.textContent=avatars[name]?.initials||name.charAt(0).toUpperCase();
     li.appendChild(avatarSpan);
     li.appendChild(document.createTextNode(name));
     memberList.appendChild(li);
   });
 }
 
-function broadcast(data){
-  Object.values(peers).forEach(p=>p.send(JSON.stringify(data)));
-}
+function broadcast(data){ socket.send(JSON.stringify(data)); }
 
 function joinRoom(){
-  myName=nameInput.value || 'Anon';
-  roomCode=codeInput.value.trim() || 'public';
-
+  myName=nameInput.value||'Anon';
+  roomCode=codeInput.value.trim()||'public';
   members[localId]=myName;
   avatars[myName]=generateAvatar(myName);
   updateMembers();
   addMessage('System',`Joined room: ${roomCode}`,true);
-
-  for(let key in localStorage){
-    if(key.startsWith('signal-')){
-      const sig=JSON.parse(localStorage[key]);
-      if(sig.from!==localId && sig.room===roomCode){
-        connectToPeer(sig.from,sig.data,false);
-      }
-    }
-  }
   broadcast({type:'member-join',id:localId,name:myName,room:roomCode});
 }
 
 function connectToPeer(peerId,signalData=null,initiator=true){
   if(peers[peerId]) return;
-  const peer = new SimplePeer({initiator,trickle:false});
+  const peer=new SimplePeer({initiator,trickle:false});
   peers[peerId]=peer;
-  peer.on('signal', data=>{ localStorage.setItem('signal-'+peerId,JSON.stringify({from:localId,data,room:roomCode})); });
-  peer.on('data', raw=>{ handleIncoming(JSON.parse(raw)); });
+  peer.on('signal',data=>{
+    broadcast({from:localId,signal:data,room:roomCode});
+  });
+  peer.on('data',raw=>{
+    const msg=JSON.parse(raw);
+    handleIncoming(msg);
+  });
   if(signalData) peer.signal(signalData);
 }
-
-function checkSignals(){
-  for(let key in localStorage){
-    if(key.startsWith('signal-')){
-      const sig=JSON.parse(localStorage[key]);
-      if(sig.from!==localId && sig.room===roomCode){
-        if(!peers[sig.from]) connectToPeer(sig.from,sig.data,false);
-        else peers[sig.from].signal(sig.data);
-      }
-    }
-  }
-}
-setInterval(checkSignals,1000);
 
 function handleIncoming(msg){
   if(msg.type==='message') addMessage(msg.name,msg.text,false);
@@ -178,7 +160,7 @@ function handleIncoming(msg){
     updateMembers();
     addMessage('System',`${msg.name} left the room`);
   }
-  else if(msg.type==='typing'){ showTyping(msg.name); }
+  else if(msg.type==='typing') showTyping(msg.name);
 }
 
 function showTyping(name){
@@ -195,7 +177,6 @@ function sendMessage(){
   msgInput.value='';
 }
 
-// ------------------- EVENT LISTENERS -------------------
 joinBtn.onclick=joinRoom;
 sendBtn.onclick=sendMessage;
 msgInput.addEventListener('keypress',e=>{
