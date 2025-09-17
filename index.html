@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Discord-Style P2P Chat</title>
+<title>Serverless P2P Chat</title>
 <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
@@ -30,6 +30,7 @@ body{margin:0;height:100vh;font-family:'Segoe UI',sans-serif;display:flex;backgr
 .input-container input{flex:1;padding:8px 10px;border-radius:5px;background:#2f3136;border:none;color:white;outline:none}
 .input-container button{margin-left:6px;background:#5865f2;border:none;padding:8px 14px;border-radius:5px;cursor:pointer;color:white;font-weight:bold}
 .input-container button:hover{background:#4752c4}
+textarea{width:100%;height:100px;background:#2f3136;color:white;border:none;border-radius:5px;padding:5px;resize:none;}
 </style>
 </head>
 <body>
@@ -39,7 +40,6 @@ body{margin:0;height:100vh;font-family:'Segoe UI',sans-serif;display:flex;backgr
     <h2>👥 Members</h2>
     <ul id="memberList" class="member-list"></ul>
   </div>
-
   <div class="chat-area">
     <div id="chatBox"></div>
     <div id="typingIndicator" class="typing-indicator"></div>
@@ -47,42 +47,38 @@ body{margin:0;height:100vh;font-family:'Segoe UI',sans-serif;display:flex;backgr
       <input id="msgInput" placeholder="Type a message..."/>
       <button id="sendBtn">Send</button>
     </div>
+    <div class="input-container flex-col gap-2 mt-2">
+      <button id="createOfferBtn">Create Offer</button>
+      <textarea id="offerOutput" placeholder="Offer/Answer appears here"></textarea>
+      <textarea id="offerInput" placeholder="Paste offer/answer here"></textarea>
+      <button id="acceptOfferBtn">Accept Offer</button>
+    </div>
   </div>
 </div>
 
 <div class="input-container" style="margin:10px;">
   <input id="nameInput" placeholder="Enter your name"/>
-  <input id="codeInput" placeholder="Room code (blank=public)"/>
-  <button id="joinBtn">Join</button>
 </div>
 
 <script>
 const chatBox=document.getElementById('chatBox');
 const msgInput=document.getElementById('msgInput');
 const sendBtn=document.getElementById('sendBtn');
-const joinBtn=document.getElementById('joinBtn');
-const codeInput=document.getElementById('codeInput');
-const nameInput=document.getElementById('nameInput');
 const memberList=document.getElementById('memberList');
 const typingIndicator=document.getElementById('typingIndicator');
+const nameInput=document.getElementById('nameInput');
 
-let peers={};
-let localId=uuidv4();
+const createOfferBtn=document.getElementById('createOfferBtn');
+const offerOutput=document.getElementById('offerOutput');
+const offerInput=document.getElementById('offerInput');
+const acceptOfferBtn=document.getElementById('acceptOfferBtn');
+
 let myName='';
-let roomCode='public';
+const localId=uuidv4();
+let peers={};
 let members={};
 let avatars={};
-let typingTimeout;
 const receivedMessages=new Set();
-
-const socket=new WebSocket('ws://localhost:8080');
-socket.onmessage=(event)=>{
-  const data=JSON.parse(event.data);
-  if(data.from!==localId){
-    if(data.signal) connectToPeer(data.from,data.signal,false);
-    handleIncoming(data);
-  }
-};
 
 function generateAvatar(name){
   const colors=['#f87171','#fbbf24','#34d399','#60a5fa','#a78bfa','#f472b6'];
@@ -108,7 +104,7 @@ function addMessage(name,text,self=false){
 
 function updateMembers(){
   memberList.innerHTML='';
-  Object.entries(members).forEach(([id,name])=>{
+  Object.values(members).forEach(name=>{
     const li=document.createElement('li');
     li.className='member flex items-center gap-2';
     const avatarSpan=document.createElement('div');
@@ -121,88 +117,66 @@ function updateMembers(){
   });
 }
 
-function broadcastToPeers(data, exceptPeerId=null){
-  Object.entries(peers).forEach(([peerId,peer])=>{
-    if(peerId!==exceptPeerId) peer.send(JSON.stringify(data));
-  });
+function broadcastToPeers(data){
+  Object.values(peers).forEach(p=>p.send(JSON.stringify(data)));
 }
 
-function joinRoom(){
-  myName=nameInput.value||'Anon';
-  roomCode=codeInput.value.trim()||'public';
-  members[localId]=myName;
-  avatars[myName]=generateAvatar(myName);
-  updateMembers();
-  addMessage('System',`Joined room: ${roomCode}`,true);
-  broadcast({type:'member-join',id:localId,name:myName,room:roomCode});
-}
-
-function connectToPeer(peerId,signalData=null,initiator=true){
-  if(peers[peerId]) return;
+function connectPeer(signalData=null,initiator=false){
   const peer=new SimplePeer({initiator,trickle:false});
-  peers[peerId]=peer;
+  peers[uuidv4()]=peer;
+
   peer.on('signal',data=>{
-    broadcast({from:localId,signal:data,room:roomCode});
+    offerOutput.value=JSON.stringify(data);
   });
+
   peer.on('data',raw=>{
     const msg=JSON.parse(raw);
-    handleIncoming(msg,peerId);
+    if(msg.id && receivedMessages.has(msg.id)) return;
+    if(msg.id) receivedMessages.add(msg.id);
+
+    if(msg.type==='message'){
+      addMessage(msg.name,msg.text,false);
+      broadcastToPeers(msg);
+    }
+    else if(msg.type==='member-join'){
+      members[msg.name]=msg.name;
+      avatars[msg.name]=avatars[msg.name]||generateAvatar(msg.name);
+      updateMembers();
+      broadcastToPeers(msg);
+    }
   });
+
   if(signalData) peer.signal(signalData);
+  return peer;
 }
 
-function handleIncoming(msg, fromPeerId=null){
-  if(msg.id && receivedMessages.has(msg.id)) return;
-  if(msg.id) receivedMessages.add(msg.id);
-
-  if(msg.type==='message'){
-    addMessage(msg.name,msg.text,false);
-    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
-  }
-  else if(msg.type==='member-join'){
-    members[msg.id]=msg.name;
-    if(!avatars[msg.name]) avatars[msg.name]=generateAvatar(msg.name);
-    updateMembers();
-    addMessage('System',`${msg.name} joined the room`);
-    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
-  }
-  else if(msg.type==='member-leave'){
-    delete members[msg.id];
-    updateMembers();
-    addMessage('System',`${msg.name} left the room`);
-    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
-  }
-  else if(msg.type==='typing'){
-    showTyping(msg.name);
-    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
-  }
-}
-
-function showTyping(name){
-  typingIndicator.textContent=`${name} is typing...`;
-  clearTimeout(typingTimeout);
-  typingTimeout=setTimeout(()=>{ typingIndicator.textContent=''; },1500);
-}
-
-function sendMessage(){
+sendBtn.onclick=()=>{
   const text=msgInput.value.trim();
   if(!text) return;
-  const messageId=uuidv4();
-  const msgData={type:'message',id:messageId,name:myName,text: text,room:roomCode};
+  const id=uuidv4();
+  const msg={type:'message',id,name:myName,text};
   addMessage(myName,text,true);
-  receivedMessages.add(messageId);
-  broadcastToPeers(msgData);
+  receivedMessages.add(id);
+  broadcastToPeers(msg);
   msgInput.value='';
-}
+};
 
-function broadcast(data){ socket.send(JSON.stringify(data)); }
+createOfferBtn.onclick=()=>{
+  myName=nameInput.value||'Anon';
+  members[myName]=myName;
+  avatars[myName]=generateAvatar(myName);
+  updateMembers();
+  connectPeer(true);
+};
 
-joinBtn.onclick=joinRoom;
-sendBtn.onclick=sendMessage;
-msgInput.addEventListener('keypress',e=>{
-  if(e.key==='Enter') sendMessage();
-  broadcast({type:'typing',name:myName,room:roomCode});
-});
+acceptOfferBtn.onclick=()=>{
+  const data=JSON.parse(offerInput.value);
+  myName=nameInput.value||'Anon';
+  members[myName]=myName;
+  avatars[myName]=generateAvatar(myName);
+  updateMembers();
+  connectPeer(data,false);
+};
 </script>
 </body>
 </html>
