@@ -73,9 +73,9 @@ let roomCode='public';
 let members={};
 let avatars={};
 let typingTimeout;
+const receivedMessages=new Set();
 
 const socket=new WebSocket('ws://localhost:8080');
-
 socket.onmessage=(event)=>{
   const data=JSON.parse(event.data);
   if(data.from!==localId){
@@ -121,7 +121,11 @@ function updateMembers(){
   });
 }
 
-function broadcast(data){ socket.send(JSON.stringify(data)); }
+function broadcastToPeers(data, exceptPeerId=null){
+  Object.entries(peers).forEach(([peerId,peer])=>{
+    if(peerId!==exceptPeerId) peer.send(JSON.stringify(data));
+  });
+}
 
 function joinRoom(){
   myName=nameInput.value||'Anon';
@@ -142,25 +146,36 @@ function connectToPeer(peerId,signalData=null,initiator=true){
   });
   peer.on('data',raw=>{
     const msg=JSON.parse(raw);
-    handleIncoming(msg);
+    handleIncoming(msg,peerId);
   });
   if(signalData) peer.signal(signalData);
 }
 
-function handleIncoming(msg){
-  if(msg.type==='message') addMessage(msg.name,msg.text,false);
+function handleIncoming(msg, fromPeerId=null){
+  if(msg.id && receivedMessages.has(msg.id)) return;
+  if(msg.id) receivedMessages.add(msg.id);
+
+  if(msg.type==='message'){
+    addMessage(msg.name,msg.text,false);
+    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
+  }
   else if(msg.type==='member-join'){
     members[msg.id]=msg.name;
     if(!avatars[msg.name]) avatars[msg.name]=generateAvatar(msg.name);
     updateMembers();
     addMessage('System',`${msg.name} joined the room`);
+    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
   }
   else if(msg.type==='member-leave'){
     delete members[msg.id];
     updateMembers();
     addMessage('System',`${msg.name} left the room`);
+    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
   }
-  else if(msg.type==='typing') showTyping(msg.name);
+  else if(msg.type==='typing'){
+    showTyping(msg.name);
+    if(fromPeerId) broadcastToPeers(msg,fromPeerId);
+  }
 }
 
 function showTyping(name){
@@ -172,10 +187,15 @@ function showTyping(name){
 function sendMessage(){
   const text=msgInput.value.trim();
   if(!text) return;
+  const messageId=uuidv4();
+  const msgData={type:'message',id:messageId,name:myName,text: text,room:roomCode};
   addMessage(myName,text,true);
-  broadcast({type:'message',name:myName,text,room:roomCode});
+  receivedMessages.add(messageId);
+  broadcastToPeers(msgData);
   msgInput.value='';
 }
+
+function broadcast(data){ socket.send(JSON.stringify(data)); }
 
 joinBtn.onclick=joinRoom;
 sendBtn.onclick=sendMessage;
@@ -184,6 +204,5 @@ msgInput.addEventListener('keypress',e=>{
   broadcast({type:'typing',name:myName,room:roomCode});
 });
 </script>
-
 </body>
 </html>
