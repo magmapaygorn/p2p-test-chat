@@ -51,6 +51,8 @@ const localId=uuidv4();
 const peers={};
 const members={};
 const receivedMessages=new Set();
+// Limit the size of the received messages set to prevent memory issues
+const MAX_RECEIVED_MESSAGES = 1000;
 
 function addMessage(name,text,self=false){
   const div=document.createElement('div');
@@ -66,8 +68,20 @@ function updateMembers(){
 
 function broadcast(msg, exceptPeerId=null){
   Object.entries(peers).forEach(([id,peer])=>{
-    if(id!==exceptPeerId) peer.send(JSON.stringify(msg));
+    if(id!==exceptPeerId && peer.connected) peer.send(JSON.stringify(msg));
   });
+}
+
+// Function to clean up old messages to prevent memory issues
+function cleanReceivedMessages() {
+  if (receivedMessages.size > MAX_RECEIVED_MESSAGES) {
+    // Remove half of the oldest entries
+    const arr = Array.from(receivedMessages);
+    const toRemove = Math.floor(arr.length / 2);
+    for (let i = 0; i < toRemove; i++) {
+      receivedMessages.delete(arr[i]);
+    }
+  }
 }
 
 function createPeer(initiator=true, remoteSignal=null){
@@ -82,15 +96,21 @@ function createPeer(initiator=true, remoteSignal=null){
   peer.on('data',raw=>{
     const msg=JSON.parse(raw);
     if(msg.id && receivedMessages.has(msg.id)) return;
-    if(msg.id) receivedMessages.add(msg.id);
+    if(msg.id) {
+      receivedMessages.add(msg.id);
+      cleanReceivedMessages(); // Clean up old messages periodically
+    }
 
     if(msg.type==='message'){
       addMessage(msg.name,msg.text,false);
-      broadcast(msg);
+      broadcast(msg, peerId);
     } else if(msg.type==='join'){
       members[msg.name]=msg.name;
       updateMembers();
-      broadcast(msg);
+      broadcast(msg, peerId);
+    } else if(msg.type==='leave'){
+      delete members[msg.name];
+      updateMembers();
     }
   });
 
@@ -98,6 +118,24 @@ function createPeer(initiator=true, remoteSignal=null){
     members[myName]=myName;
     updateMembers();
     broadcast({type:'join',name:myName,id:localId});
+  });
+
+  peer.on('error', err => {
+    console.error('Peer error:', err);
+    delete peers[peerId];
+    if (members[myName]) {
+      delete members[myName];
+      updateMembers();
+    }
+  });
+
+  peer.on('close', () => {
+    console.log('Peer connection closed:', peerId);
+    delete peers[peerId];
+    if (members[myName]) {
+      delete members[myName];
+      updateMembers();
+    }
   });
 
   if(remoteSignal) peer.signal(remoteSignal.signal);
@@ -130,6 +168,11 @@ connectBtn.onclick=()=>{
     }
   }catch(e){alert('Invalid code');}
 };
+
+// Handle window unload to notify other peers about leaving
+window.addEventListener('beforeunload', () => {
+  broadcast({type:'leave',name:myName,id:localId});
+});
 </script>
 
 </body>
